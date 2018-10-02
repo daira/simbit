@@ -57,6 +57,7 @@ var GenesisBlock = new Block(false, 0);
 Block.prototype = {
 	target_avg_between_blocks: 10 * 60 * 1000,
 	difficulty_adjustment_period: 2016,
+	proof_of_work_limit: 1000,
 
 	difficultyAdjustment: function() {
 		var total = 0;
