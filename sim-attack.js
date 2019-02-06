@@ -11,7 +11,7 @@ btc.Blockchain.Block.prototype.target_avg_between_blocks = 2.5 * 60 * 1000; // 2
 btc.Blockchain.GenesisBlock.difficulty = 3700;
 //btc.Blockchain.GenesisBlock.difficulty = 150000;
 
-var difficultyAlgorithms = ['Bitcoin', 'Bitcoin every block', 'DigiShield v3', 'DigiShield v3 without median', 'Dark Gravity Wave v3', 'Zcash', 'zawy', 'Ethereum', 'MIDAS', 'MIDAS w/o CalSync'];
+var difficultyAlgorithms = ['Zcash'];
 function setDifficultyAlgorithm(choice) {
 	var digishieldUseMedianTime = true;
 	var midasDisableCalendarSync = false;
@@ -19,7 +19,6 @@ function setDifficultyAlgorithm(choice) {
 
 	switch (choice) {
 		case 'Bitcoin':
-		default:
 btc.Blockchain.Block.prototype.difficulty_adjustment_period = 500;
 btc.Blockchain.Block.prototype.difficultyAdjustment = function() {
 		var total = 0;
@@ -208,6 +207,7 @@ btc.Blockchain.Block.prototype.difficultyAdjustment = function() {
 			break;
 
 		case 'Zcash':
+		default:
 function getMedianTimePast(b) {
 	var nMedianTimeSpan = 11;
 
@@ -224,7 +224,11 @@ function getMedianTimePast(b) {
 btc.Blockchain.Block.prototype.difficulty_adjustment_period = 1;
 btc.Blockchain.Block.prototype.difficultyAdjustment = function() {
 	var nAveragingInterval = 17;
-	var nAveragingTargetTimespan = nAveragingInterval * this.target_avg_between_blocks;
+        var nTargetSpacing = this.target_avg_between_blocks;
+        if (BlossomActive) {
+		nTargetSpacing /= BlossomPoWTargetSpacingRatio;
+	}
+	var nAveragingTargetTimespan = nAveragingInterval * nTargetSpacing;
 
 	var nMaxAdjustDownV3 = 32; // 16% adjustment down
 	var nMaxAdjustUpV3 = 16; // 8% adjustment up
@@ -531,52 +535,39 @@ client.use(peermgr)
 client.use(btc)
 
 var hashrate = 1;
-var multipool = 0.99;
-var multipoolActive = true;
-var toggleMultipool = true;
-var toggleCheckpoint = -1;
+var BlossomPoWTargetSpacingRatio = 2.0;
+var BlossomEnabled = true;
+var BlossomActive = false;
 
 client.init(function() {
 	var self = this;
 
 	function toggle(b) {
-		var toggleInterval = parseInt($("#toggleinterval").val());
-		if (toggleMultipool && b.h > toggleCheckpoint &&
-				!(b.h % toggleInterval)) {
-			multipoolActive = !multipoolActive;
-			toggleCheckpoint = b.h;
-			if (multipoolActive) self.log('<b>Multipool active!</b>');
-			if (!multipoolActive) self.log('<b>Multipool disabled!</b>');
+		var BlossomActivationHeight = parseInt($("#blossomactivationheight").val());
+		if (BlossomEnabled && b.h == BlossomActivationHeight) {
+			BlossomActive = true;
+			BlossomPoWTargetSpacingRatio = parseFloat($("#blossompowtargetspacingratio").val());
+			self.log('<b>Blossom activated! ratio='+BlossomPoWTargetSpacingRatio+'</b>' );
 		}
 	};
 
 	self.on("miner:success", function(from, b) {
-		if (this.id != 0 || multipoolActive) {
-	        	self.log("Height: " + b.h + ", difficulty: " + b.difficulty);
-			b.time = self.now();
-			b.transactions = self.mempool.getList();
+		self.log("Height: " + b.h + ", difficulty: " + b.difficulty);
+		b.time = self.now();
+		b.transactions = self.mempool.getList();
 
-			self.inventory.createObj("block", b)
+		self.inventory.createObj("block", b)
 
-			if (self.blockchain.chainstate.enter(b) != -1) {
-				self.inventory.relay(b.id, true);
-			}
+		if (self.blockchain.chainstate.enter(b) != -1) {
+			self.inventory.relay(b.id, true);
 		}
 		toggle(b);
 		return false;
 	}, this)
 
-////////////////////////////////////////////////
-
-	if (this.id == 0) {
-		hashrate -= multipool;
-		this.mine(multipool);
-	} else {
-		var myHashrate = (hashrate / 2) * Math.random();
-		hashrate -= myHashrate;
-		this.mine(myHashrate);
-	}
-////////////////////////////////////////////////
+	var myHashrate = (hashrate / 2) * Math.random();
+	hashrate -= myHashrate;
+	this.mine(myHashrate);
 })
 
 net.add(100, client)
